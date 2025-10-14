@@ -1,5 +1,5 @@
 <template>
-  <div class="p-4 pb-20">
+  <div class="p-4 pb-20 w-[80vw]">
     <!-- Header -->
     <div class="flex justify-between items-center mb-4">
       <div v-if="showTotal" class="text-3xl font-semibold text-green-600">
@@ -51,7 +51,7 @@
 
     <button
       @click="addAccount"
-      class="fixed bottom-20 right-4 bg-green-500 text-white rounded-full shadow-lg w-14 h-14 text-3xl"
+      class="fixed bottom-20 right-4 bg-green-500 text-white rounded-full shadow-lg w-14 h-14 text-3xl mb-4"
     >
       +
     </button>
@@ -59,11 +59,15 @@
 </template>
 
 <script setup>
-import { ref, computed } from 'vue';
+import { ref, computed, onMounted } from 'vue';
+import { supabase } from '../../supabase';
+import getSymbolFromCurrency from 'currency-symbol-map';
+
 import { Eye, EyeOff } from 'lucide-vue-next';
 
-// === Базова валюта ===
 const baseCurrency = ref('UAH');
+const showTotal = ref(true);
+const collapsedCategories = ref([]);
 
 // === Курс валют (відносно UAH) (mock) ===
 // *Пізніше можна замінити на API (наприклад, exchangerate.host)*
@@ -74,36 +78,24 @@ const exchangeRates = ref({
   BTC: 2500000,
 });
 
-// === Дані рахунків (mock) ===
-const accounts = ref([
-  {
-    id: 1,
-    name: 'Monobank',
-    category: 'Banks',
-    amount: 42000,
-    currency: 'UAH',
-  },
-  { id: 1, name: 'Monobank', category: 'Banks', amount: 4200, currency: 'UAH' },
-  { id: 1, name: 'Privat', category: 'Banks', amount: 4200, currency: 'UAH' },
-  { id: 1, name: 'Raif', category: 'Banks', amount: 4200, currency: 'UAH' },
-  { id: 1, name: 'ABank', category: 'Banks', amount: 4200, currency: 'UAH' },
-  { id: 1, name: 'Sense', category: 'Banks', amount: 4200, currency: 'UAH' },
-  { id: 2, name: 'Revolut', category: 'Banks', amount: 300, currency: 'USD' },
-  { id: 3, name: 'Cash', category: 'Cash', amount: 18000, currency: 'UAH' },
-  { id: 3, name: 'EUR', category: 'Cash', amount: 250, currency: 'EUR' },
-  { id: 3, name: 'USD', category: 'Cash', amount: 250, currency: 'USD' },
-  { id: 4, name: 'Binance', category: 'Crypto', amount: 0.01, currency: 'BTC' },
-]);
+const accounts = ref([]);
+async function fetchAccounts() {
+  const { data, error } = await supabase.from('accounts').select('*');
+  if (error) console.error(error);
+  else accounts.value = data;
+}
+
+onMounted(() => {
+  fetchAccounts();
+});
 
 // === Стани ===
-const showTotal = ref(true);
-const collapsedCategories = ref([]);
 
 // === Обчислення загальної суми ===
 const totalInBase = computed(() => {
   return accounts.value.reduce((sum, acc) => {
-    const rateToUAH = exchangeRates.value[acc.currency] || 1;
-    return sum + acc.amount * rateToUAH;
+    const rate = exchangeRates.value[acc.currency] || 1;
+    return sum + acc.amount * rate;
   }, 0);
 });
 
@@ -118,12 +110,13 @@ const groupedAccounts = computed(() => {
 });
 
 // === Функції ===
-function formatCurrency(amount, currency) {
-  return amount.toLocaleString('uk-UA', {
-    style: 'currency',
-    currency: currency,
-    maximumFractionDigits: 2,
-  });
+function formatCurrency(amount, code) {
+  const symbol = getSymbolFromCurrency(code) || code;
+  const number = new Intl.NumberFormat('en-US', {
+    maximumFractionDigits: 0,
+  }).format(amount);
+
+  return `${symbol} ${number}`;
 }
 
 function toggleTotal() {
@@ -144,19 +137,20 @@ function isCollapsed(category) {
   return collapsedCategories.value.includes(category);
 }
 
-function addAccount() {
+async function addAccount() {
   //temporary prompt-based
   const name = prompt('Назва рахунку:');
   const category = prompt('Категорія:');
+  const currency = prompt('Валюта (UAH, USD, EUR, BTC):', 'UAH');
   const amount = Number(prompt('Сума:'));
-  const currency = prompt('Валюта (наприклад, UAH, USD):', 'UAH');
-  if (!name || !category || isNaN(amount)) return;
-  accounts.value.push({
-    id: Date.now(),
-    name,
-    category,
-    amount,
-    currency,
-  });
+  if (!name || !category || !currency || isNaN(amount)) return;
+
+  const { data, error } = await supabase
+    .from('accounts')
+    .insert([{ name, category, currency: currency.toUpperCase(), amount }])
+    .select();
+
+  if (error) console.error(error);
+  else accounts.value.push(data[0]);
 }
 </script>

@@ -1,5 +1,5 @@
 <template>
-  <div class="w-max h-max app">
+  <div class="">
     <component :is="currentPage" />
 
     <BottomNav :current="current" @navigate="navigateTo" />

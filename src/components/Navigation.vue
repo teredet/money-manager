@@ -1,6 +1,6 @@
 <template>
   <nav
-    class="fixed bottom-0 left-0 w-full bg-zinc-900 flex justify-around py-2 shadow-md"
+    class="fixed bottom-0 left-0 w-full bg-zinc-900 flex justify-around py-2 shadow-md pb-6"
   >
     <button
       v-for="item in items"
@@ -11,7 +11,7 @@
         current === item.name ? 'text-white-600 font-semibold' : 'text-gray-500'
       "
     >
-      <span>{{ item.label }}</span>
+      <component :is="item.component" class="" />
     </button>
   </nav>
 </template>
@@ -21,10 +21,17 @@ defineProps({
   current: String,
 });
 
+import {
+  LayoutDashboard,
+  Wallet,
+  ChartSpline,
+  Settings,
+} from 'lucide-vue-next';
+
 const items = [
-  { name: 'Dashboard', label: 'Dashboard' },
-  { name: 'Accounts', label: 'Accounts' },
-  { name: 'Reports', label: 'Reports' },
-  { name: 'Settings', label: 'Settings' },
+  { name: 'Dashboard', component: LayoutDashboard },
+  { name: 'Accounts', component: Wallet },
+  { name: 'Reports', component: ChartSpline },
+  { name: 'Settings', component: Settings },
 ];
 </script>
