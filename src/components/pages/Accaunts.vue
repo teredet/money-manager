@@ -80,6 +80,12 @@ const exchangeRates = ref({
 
 const accounts = ref([]);
 async function fetchAccounts() {
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    accounts.value = [];
+    return;
+  }
+
   const { data, error } = await supabase.from('accounts').select('*');
   if (error) console.error(error);
   else accounts.value = data;
@@ -144,6 +150,9 @@ async function addAccount() {
   const currency = prompt('Валюта (UAH, USD, EUR, BTC):', 'UAH');
   const amount = Number(prompt('Сума:'));
   if (!name || !category || !currency || isNaN(amount)) return;
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) return;
 
   const { data, error } = await supabase
     .from('accounts')
