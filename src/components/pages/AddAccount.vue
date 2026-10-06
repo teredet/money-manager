@@ -1,0 +1,165 @@
+<template>
+  <form class="w-[80vw] p-4 pb-20 text-left" @submit.prevent="submit">
+    <h2 class="mb-4 text-xl font-bold">Новий рахунок</h2>
+
+    <label class="mb-1 block text-sm" for="account-name">Назва</label>
+    <input
+      id="account-name"
+      v-model="name"
+      class="mb-3 w-full rounded border px-3 py-2"
+      type="text"
+      autocomplete="off"
+      required
+    />
+
+    <label class="mb-1 block text-sm" for="account-category">Категорія</label>
+    <select
+      id="account-category"
+      v-model="category"
+      class="mb-3 w-full rounded border px-3 py-2"
+      required
+    >
+      <option v-for="item in categories" :key="item" :value="item">
+        {{ item }}
+      </option>
+    </select>
+
+    <label class="mb-1 block text-sm" for="account-currency">Валюта</label>
+    <select
+      id="account-currency"
+      v-model="currency"
+      class="mb-3 w-full rounded border px-3 py-2"
+      required
+    >
+      <option v-for="code in currencies" :key="code" :value="code">
+        {{ code }}
+      </option>
+    </select>
+    <p v-if="!currencyReady" class="mb-3 text-sm text-gray-500">
+      {{
+        ratesStatus === 'loading'
+          ? 'Курс ще завантажується.'
+          : 'Немає курсу для цієї валюти.'
+      }}
+    </p>
+
+    <label class="mb-1 block text-sm" for="account-amount">Сума</label>
+    <input
+      id="account-amount"
+      v-model="amount"
+      class="mb-3 w-full rounded border px-3 py-2"
+      type="text"
+      inputmode="decimal"
+      autocomplete="off"
+      required
+    />
+
+    <p v-if="errorMessage" class="mb-3 text-sm text-red-600">{{ errorMessage }}</p>
+
+    <div class="flex gap-2">
+      <button class="bg-green-600 text-white" type="submit" :disabled="busy">
+        Зберегти
+      </button>
+      <button type="button" :disabled="busy" @click="emit('cancel')">
+        Скасувати
+      </button>
+    </div>
+  </form>
+</template>
+
+<script setup>
+import { computed, ref } from 'vue';
+import { supabase } from '../../supabase';
+import { parseMajorToMinor } from '../../money.js';
+
+const props = defineProps({
+  categories: {
+    type: Array,
+    required: true,
+  },
+  currencies: {
+    type: Array,
+    required: true,
+  },
+  rates: {
+    type: Object,
+    default: null,
+  },
+  ratesStatus: {
+    type: String,
+    default: 'loading',
+  },
+});
+
+const emit = defineEmits(['cancel', 'saved']);
+
+const name = ref('');
+const category = ref(props.categories[0] ?? '');
+const currency = ref(
+  props.currencies.includes('UAH') ? 'UAH' : props.currencies[0] ?? ''
+);
+const amount = ref('');
+const errorMessage = ref('');
+const busy = ref(false);
+
+const currencyReady = computed(() => {
+  if (currency.value === 'UAH') return true;
+  return Boolean(props.rates?.[currency.value]);
+});
+
+async function submit() {
+  errorMessage.value = '';
+  const trimmedName = name.value.trim();
+
+  if (!trimmedName) {
+    errorMessage.value = 'Вкажіть назву';
+    return;
+  }
+  if (!props.categories.includes(category.value)) {
+    errorMessage.value = 'Невідома категорія';
+    return;
+  }
+  if (!props.currencies.includes(currency.value)) {
+    errorMessage.value = 'Невідома валюта';
+    return;
+  }
+  if (!currencyReady.value) {
+    errorMessage.value = 'Немає курсу для цієї валюти';
+    return;
+  }
+
+  const amountMinor = parseMajorToMinor(amount.value, currency.value);
+  if (amountMinor == null) {
+    errorMessage.value = 'Некоректна сума';
+    return;
+  }
+
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) {
+    errorMessage.value = 'Увійдіть, щоб зберегти рахунок';
+    return;
+  }
+
+  busy.value = true;
+  const { data, error } = await supabase
+    .from('accounts')
+    .insert([
+      {
+        name: trimmedName,
+        category: category.value,
+        currency: currency.value,
+        amount_minor: amountMinor.toString(),
+      },
+    ])
+    .select();
+  busy.value = false;
+
+  if (error) {
+    console.error(error);
+    errorMessage.value = error.message;
+    return;
+  }
+
+  emit('saved', data[0]);
+}
+</script>
