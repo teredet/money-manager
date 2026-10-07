@@ -1,6 +1,15 @@
 <template>
+  <ChangeAccount
+    v-if="editingAccount"
+    :account="editingAccount"
+    :categories="categories"
+    :rates="rates"
+    :rates-status="ratesStatus"
+    @cancel="editingAccount = null"
+    @saved="onAccountUpdated"
+  />
   <AddAccount
-    v-if="adding"
+    v-else-if="adding"
     :categories="categories"
     :currencies="currencies"
     :rates="rates"
@@ -72,17 +81,20 @@
         <p v-if="accounts.length === 0" class="py-2 text-sm text-gray-500">
           Немає рахунків
         </p>
-        <div
+        <button
           v-for="acc in accounts"
           :key="acc.id"
-          class="flex justify-between items-center py-1 border-b border-zinc-700 last:border-none"
+          type="button"
+          class="flex w-full items-center justify-between gap-3 border-b border-zinc-700 py-1 text-left last:border-none hover:bg-zinc-800/50"
+          @click="startEditing(acc)"
         >
           <div class="flex items-center gap-2">
             <Wallet class="h-4 w-4 text-zinc-400" />
             <span class="text-white">{{ acc.name }}</span>
           </div>
+
           <span class="font-medium text-white">{{ formatAccount(acc) }}</span>
-        </div>
+        </button>
       </div>
     </div>
   </div>
@@ -100,6 +112,7 @@ import {
 } from '../../money.js';
 import { fetchUahRates, formatRateDate } from '../../rates.js';
 import AddAccount from './AddAccount.vue';
+import ChangeAccount from './ChangeAccount.vue';
 
 const categories = ref([]);
 const currencies = ref([]);
@@ -107,6 +120,7 @@ const listsReady = ref(false);
 const listsError = ref('');
 
 const adding = ref(false);
+const editingAccount = ref(null);
 const showTotal = ref(true);
 const collapsedCategories = ref([]);
 const accounts = ref([]);
@@ -339,5 +353,19 @@ function isCollapsed(category) {
 function onAccountSaved(account) {
   accounts.value.push(account);
   adding.value = false;
+}
+
+function startEditing(account) {
+  editingAccount.value = account;
+}
+
+function onAccountUpdated(account) {
+  const index = accounts.value.findIndex((item) => item.id === account.id);
+  if (index >= 0) {
+    accounts.value.splice(index, 1, account);
+  } else {
+    accounts.value.push(account);
+  }
+  editingAccount.value = null;
 }
 </script>
