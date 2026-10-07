@@ -1,69 +1,68 @@
 <template>
-  <div class="mx-auto flex w-full max-w-[960px] justify-center p-4 pb-20">
-    <form
-      class="w-full max-w-md rounded-xl bg-zinc-900 p-4 text-left shadow-sm"
-      @submit.prevent="submit"
-    >
-      <div class="mb-4 flex items-center justify-between">
-        <button
-          type="button"
-          class="flex h-9 w-9 items-center justify-center rounded-full text-xl text-zinc-200 transition hover:bg-zinc-800"
-          aria-label="Back"
-          @click="emit('cancel')"
+  <div class="w-full p-4 pb-20">
+    <div class="mb-4 flex w-full items-center">
+      <button
+        type="button"
+        class="mr-auto text-sm text-gray-400"
+        @click="emit('cancel')"
+      >
+        ←
+      </button>
+      <h2 class="flex-1 text-center text-lg font-semibold text-white">
+        New account
+      </h2>
+      <span class="w-12" aria-hidden="true"></span>
+    </div>
+
+    <form class="space-y-3" @submit.prevent="submit">
+      <div>
+        <label class="mb-1 block text-sm text-gray-300" for="account-name"
+          >Name</label
         >
-          ←
-        </button>
-        <h2 class="text-xl font-bold text-white">New account</h2>
-        <button
-          type="submit"
-          :disabled="busy"
-          class="flex h-9 w-9 items-center justify-center rounded-full text-xl font-semibold text-green-400 transition hover:bg-zinc-800 disabled:opacity-60"
-          aria-label="Save account"
-        >
-          +
-        </button>
+        <input
+          id="account-name"
+          v-model="name"
+          class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
+          type="text"
+          autocomplete="off"
+          placeholder="Cash, Savings..."
+          required
+        />
       </div>
 
-      <label class="mb-1 block text-sm text-zinc-300" for="account-name"
-        >Назва</label
-      >
-      <input
-        id="account-name"
-        v-model="name"
-        class="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white outline-none ring-0 placeholder:text-zinc-500"
-        type="text"
-        autocomplete="off"
-        required
-      />
+      <div>
+        <label class="mb-1 block text-sm text-gray-300" for="account-category"
+          >Category</label
+        >
+        <select
+          id="account-category"
+          v-model="category"
+          class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
+          required
+        >
+          <option v-for="item in categories" :key="item" :value="item">
+            {{ item }}
+          </option>
+        </select>
+      </div>
 
-      <label class="mb-1 block text-sm text-zinc-300" for="account-category"
-        >Категорія</label
-      >
-      <select
-        id="account-category"
-        v-model="category"
-        class="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white outline-none"
-        required
-      >
-        <option v-for="item in categories" :key="item" :value="item">
-          {{ item }}
-        </option>
-      </select>
+      <div>
+        <label class="mb-1 block text-sm text-gray-300" for="account-currency"
+          >Currency</label
+        >
+        <select
+          id="account-currency"
+          v-model="currency"
+          class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
+          required
+        >
+          <option v-for="code in currencies" :key="code" :value="code">
+            {{ code }}
+          </option>
+        </select>
+      </div>
 
-      <label class="mb-1 block text-sm text-zinc-300" for="account-currency"
-        >Валюта</label
-      >
-      <select
-        id="account-currency"
-        v-model="currency"
-        class="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white outline-none"
-        required
-      >
-        <option v-for="code in currencies" :key="code" :value="code">
-          {{ code }}
-        </option>
-      </select>
-      <p v-if="!currencyReady" class="mb-3 text-sm text-gray-500">
+      <p v-if="!currencyReady" class="text-sm text-gray-500">
         {{
           ratesStatus === 'loading'
             ? 'Курс ще завантажується.'
@@ -71,22 +70,33 @@
         }}
       </p>
 
-      <label class="mb-1 block text-sm text-zinc-300" for="account-amount"
-        >Сума</label
-      >
-      <input
-        id="account-amount"
-        v-model="amount"
-        class="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white outline-none placeholder:text-zinc-500"
-        type="text"
-        inputmode="decimal"
-        autocomplete="off"
-        required
-      />
+      <div>
+        <label class="mb-1 block text-sm text-gray-300" for="account-amount"
+          >Amount</label
+        >
+        <input
+          id="account-amount"
+          v-model="amount"
+          type="number"
+          min="0"
+          step="0.01"
+          class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
+          placeholder="0.00"
+          required
+        />
+      </div>
 
-      <p v-if="errorMessage" class="mb-3 text-sm text-red-600">
+      <p v-if="errorMessage" class="text-sm text-red-500">
         {{ errorMessage }}
       </p>
+
+      <button
+        type="submit"
+        :disabled="busy"
+        class="w-full rounded-lg bg-green-500 px-4 py-3 font-semibold text-white disabled:opacity-60"
+      >
+        Save account
+      </button>
     </form>
   </div>
 </template>
