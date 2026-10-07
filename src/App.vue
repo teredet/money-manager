@@ -2,34 +2,23 @@
   <p v-if="!ready" class="p-4">Завантаження…</p>
   <AuthScreen v-else-if="!session" />
   <div v-else>
-    <component :is="currentPage" />
-    <BottomNav :current="current" @navigate="navigateTo" />
+    <RouterView v-slot="{ Component }">
+      <KeepAlive>
+        <component :is="Component" />
+      </KeepAlive>
+    </RouterView>
+    <BottomNav />
   </div>
 </template>
 
 <script setup>
-import { ref, computed, onMounted, onUnmounted } from 'vue';
+import { ref, onMounted, onUnmounted } from 'vue';
 import { supabase } from './supabase';
 import AuthScreen from './components/AuthScreen.vue';
 import BottomNav from './components/Navigation.vue';
 
-import Dashboard from './components/pages/Dashboard.vue';
-import Accounts from './components/pages/Accaunts.vue';
-import Reports from './components/pages/Reports.vue';
-import Settings from './components/pages/Settings.vue';
-
-const current = ref('Dashboard');
 const session = ref(null);
 const ready = ref(false);
-
-const pages = {
-  Dashboard,
-  Accounts,
-  Reports,
-  Settings,
-};
-
-const currentPage = computed(() => pages[current.value]);
 
 let authSubscription;
 
@@ -50,8 +39,4 @@ onMounted(async () => {
 onUnmounted(() => {
   authSubscription?.unsubscribe();
 });
-
-function navigateTo(page) {
-  current.value = page;
-}
 </script>

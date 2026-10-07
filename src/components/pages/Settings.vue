@@ -143,7 +143,7 @@
 </template>
 
 <script setup>
-import { ref, onMounted } from 'vue';
+import { ref, onMounted, onActivated } from 'vue';
 import { supabase } from '../../supabase';
 import {
   fetchDefaultAccounts,
@@ -238,8 +238,10 @@ function backToMain() {
 onMounted(async () => {
   const { data } = await supabase.auth.getSession();
   email.value = data.session?.user?.email ?? '';
-  await Promise.all([loadAccounts(), loadDefaultAccounts()]);
+  await loadDefaultAccounts();
 });
+
+onActivated(loadAccounts);
 
 async function signOut() {
   errorMessage.value = '';

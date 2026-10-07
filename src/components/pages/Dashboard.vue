@@ -145,7 +145,7 @@
 </template>
 
 <script setup>
-import { computed, onMounted, ref, watchEffect } from 'vue';
+import { computed, onActivated, onMounted, ref, watchEffect } from 'vue';
 import { supabase } from '../../supabase';
 import { convertMinor, formatMinor } from '../../money.js';
 import { fetchUahRates } from '../../rates.js';
@@ -406,8 +406,9 @@ async function onTransactionSaved() {
   await loadTransactions();
 }
 
-onMounted(async () => {
-  await loadRates();
+onMounted(loadRates);
+
+onActivated(async () => {
   await loadAccounts();
   await loadTransactions();
 });

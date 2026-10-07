@@ -101,7 +101,7 @@
 </template>
 
 <script setup>
-import { ref, computed, onMounted } from 'vue';
+import { ref, computed, onMounted, onActivated } from 'vue';
 import { supabase } from '../../supabase';
 import { Eye, EyeOff, Wallet } from 'lucide-vue-next';
 import {
@@ -172,10 +172,11 @@ async function fetchLists() {
 }
 
 onMounted(() => {
-  fetchAccounts();
   fetchLists();
   loadRates();
 });
+
+onActivated(fetchAccounts);
 
 function accountMinor(acc) {
   return asMinor(acc.amount_minor);
