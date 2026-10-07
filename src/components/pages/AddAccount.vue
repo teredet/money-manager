@@ -1,70 +1,94 @@
 <template>
-  <form class="w-[80vw] p-4 pb-20 text-left" @submit.prevent="submit">
-    <h2 class="mb-4 text-xl font-bold">Новий рахунок</h2>
-
-    <label class="mb-1 block text-sm" for="account-name">Назва</label>
-    <input
-      id="account-name"
-      v-model="name"
-      class="mb-3 w-full rounded border px-3 py-2"
-      type="text"
-      autocomplete="off"
-      required
-    />
-
-    <label class="mb-1 block text-sm" for="account-category">Категорія</label>
-    <select
-      id="account-category"
-      v-model="category"
-      class="mb-3 w-full rounded border px-3 py-2"
-      required
+  <div class="mx-auto flex w-full max-w-[960px] justify-center p-4 pb-20">
+    <form
+      class="w-full max-w-md rounded-xl bg-zinc-900 p-4 text-left shadow-sm"
+      @submit.prevent="submit"
     >
-      <option v-for="item in categories" :key="item" :value="item">
-        {{ item }}
-      </option>
-    </select>
+      <div class="mb-4 flex items-center justify-between">
+        <button
+          type="button"
+          class="flex h-9 w-9 items-center justify-center rounded-full text-xl text-zinc-200 transition hover:bg-zinc-800"
+          aria-label="Back"
+          @click="emit('cancel')"
+        >
+          ←
+        </button>
+        <h2 class="text-xl font-bold text-white">New account</h2>
+        <button
+          type="submit"
+          :disabled="busy"
+          class="flex h-9 w-9 items-center justify-center rounded-full text-xl font-semibold text-green-400 transition hover:bg-zinc-800 disabled:opacity-60"
+          aria-label="Save account"
+        >
+          +
+        </button>
+      </div>
 
-    <label class="mb-1 block text-sm" for="account-currency">Валюта</label>
-    <select
-      id="account-currency"
-      v-model="currency"
-      class="mb-3 w-full rounded border px-3 py-2"
-      required
-    >
-      <option v-for="code in currencies" :key="code" :value="code">
-        {{ code }}
-      </option>
-    </select>
-    <p v-if="!currencyReady" class="mb-3 text-sm text-gray-500">
-      {{
-        ratesStatus === 'loading'
-          ? 'Курс ще завантажується.'
-          : 'Немає курсу для цієї валюти.'
-      }}
-    </p>
+      <label class="mb-1 block text-sm text-zinc-300" for="account-name"
+        >Назва</label
+      >
+      <input
+        id="account-name"
+        v-model="name"
+        class="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white outline-none ring-0 placeholder:text-zinc-500"
+        type="text"
+        autocomplete="off"
+        required
+      />
 
-    <label class="mb-1 block text-sm" for="account-amount">Сума</label>
-    <input
-      id="account-amount"
-      v-model="amount"
-      class="mb-3 w-full rounded border px-3 py-2"
-      type="text"
-      inputmode="decimal"
-      autocomplete="off"
-      required
-    />
+      <label class="mb-1 block text-sm text-zinc-300" for="account-category"
+        >Категорія</label
+      >
+      <select
+        id="account-category"
+        v-model="category"
+        class="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white outline-none"
+        required
+      >
+        <option v-for="item in categories" :key="item" :value="item">
+          {{ item }}
+        </option>
+      </select>
 
-    <p v-if="errorMessage" class="mb-3 text-sm text-red-600">{{ errorMessage }}</p>
+      <label class="mb-1 block text-sm text-zinc-300" for="account-currency"
+        >Валюта</label
+      >
+      <select
+        id="account-currency"
+        v-model="currency"
+        class="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white outline-none"
+        required
+      >
+        <option v-for="code in currencies" :key="code" :value="code">
+          {{ code }}
+        </option>
+      </select>
+      <p v-if="!currencyReady" class="mb-3 text-sm text-gray-500">
+        {{
+          ratesStatus === 'loading'
+            ? 'Курс ще завантажується.'
+            : 'Немає курсу для цієї валюти.'
+        }}
+      </p>
 
-    <div class="flex gap-2">
-      <button class="bg-green-600 text-white" type="submit" :disabled="busy">
-        Зберегти
-      </button>
-      <button type="button" :disabled="busy" @click="emit('cancel')">
-        Скасувати
-      </button>
-    </div>
-  </form>
+      <label class="mb-1 block text-sm text-zinc-300" for="account-amount"
+        >Сума</label
+      >
+      <input
+        id="account-amount"
+        v-model="amount"
+        class="mb-3 w-full rounded-lg border border-zinc-700 bg-zinc-950 px-3 py-2 text-white outline-none placeholder:text-zinc-500"
+        type="text"
+        inputmode="decimal"
+        autocomplete="off"
+        required
+      />
+
+      <p v-if="errorMessage" class="mb-3 text-sm text-red-600">
+        {{ errorMessage }}
+      </p>
+    </form>
+  </div>
 </template>
 
 <script setup>
@@ -96,7 +120,7 @@ const emit = defineEmits(['cancel', 'saved']);
 const name = ref('');
 const category = ref(props.categories[0] ?? '');
 const currency = ref(
-  props.currencies.includes('UAH') ? 'UAH' : props.currencies[0] ?? ''
+  props.currencies.includes('UAH') ? 'UAH' : (props.currencies[0] ?? ''),
 );
 const amount = ref('');
 const errorMessage = ref('');
