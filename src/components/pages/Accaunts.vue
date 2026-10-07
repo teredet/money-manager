@@ -8,7 +8,7 @@
     @cancel="adding = false"
     @saved="onAccountSaved"
   />
-  <div v-else class="p-4 pb-20 w-[80vw]">
+  <div v-else class="mx-auto w-full max-w-[960px] p-4 pb-20">
     <!-- Header -->
     <div class="flex justify-between items-center mb-4">
       <div v-if="showTotal" class="text-left">
@@ -21,62 +21,77 @@
         </p>
       </div>
       <div v-else class="text-3xl font-semibold text-green-600">**********</div>
-      <button @click="toggleTotal" class="text-sm text-gray-500">
-        <component
-          :is="showTotal ? EyeOff : Eye"
-          class="w-5 h-5 text-gray-600"
-        />
-      </button>
+      <div class="flex items-center gap-2">
+        <button @click="toggleTotal" class="text-sm text-gray-500">
+          <component
+            :is="showTotal ? EyeOff : Eye"
+            class="w-5 h-5 text-gray-600"
+          />
+        </button>
+        <button
+          @click="adding = true"
+          :disabled="categories.length === 0 || currencies.length === 0"
+          class="flex h-9 w-9 items-center justify-center rounded-full text-xl font-semibold text-green-500 disabled:opacity-50"
+          aria-label="Add account"
+        >
+          +
+        </button>
+      </div>
     </div>
 
     <p v-if="listsError" class="mb-3 text-sm text-red-600">{{ listsError }}</p>
-    <p v-else-if="!listsReady" class="mb-3 text-sm text-gray-500">Завантаження…</p>
+    <p v-else-if="!listsReady" class="mb-3 text-sm text-gray-500">
+      Завантаження…
+    </p>
 
     <!-- Categories -->
     <div
       v-for="(accounts, category) in groupedAccounts"
       :key="category"
-      class="mb-3 border rounded-lg bg-zinc-1000 shadow-sm"
+      class="mb-3 rounded-lg bg-zinc-900 shadow-sm"
     >
       <button
         class="w-full text-left p-3 flex justify-between items-center"
         @click="toggleCategory(category)"
       >
         <span class="font-semibold text-white">{{ category }}</span>
-        <span class="text-white">
-          {{ isCollapsed(category) ? '+' : '–' }}
-        </span>
+        <div class="flex items-center gap-3">
+          <span class="text-sm text-gray-300">{{
+            categoryTotal(accounts)
+          }}</span>
+          <span class="text-zinc-400">
+            {{ isCollapsed(category) ? '+' : '–' }}
+          </span>
+        </div>
       </button>
 
-      <div v-show="!isCollapsed(category)" class="border-t px-3 py-2">
+      <div
+        v-show="!isCollapsed(category)"
+        class="border-t border-zinc-700 px-3 py-2"
+      >
         <p v-if="accounts.length === 0" class="py-2 text-sm text-gray-500">
           Немає рахунків
         </p>
         <div
           v-for="acc in accounts"
           :key="acc.id"
-          class="flex justify-between py-1 border-b last:border-none"
+          class="flex justify-between items-center py-1 border-b border-zinc-700 last:border-none"
         >
-          <span class="text-white">{{ acc.name }}</span>
+          <div class="flex items-center gap-2">
+            <Wallet class="h-4 w-4 text-zinc-400" />
+            <span class="text-white">{{ acc.name }}</span>
+          </div>
           <span class="font-medium text-white">{{ formatAccount(acc) }}</span>
         </div>
       </div>
     </div>
-
-    <button
-      @click="adding = true"
-      :disabled="categories.length === 0 || currencies.length === 0"
-      class="fixed bottom-20 right-4 bg-green-500 text-white rounded-full shadow-lg w-14 h-14 text-3xl mb-4"
-    >
-      +
-    </button>
   </div>
 </template>
 
 <script setup>
 import { ref, computed, onMounted } from 'vue';
 import { supabase } from '../../supabase';
-import { Eye, EyeOff } from 'lucide-vue-next';
+import { Eye, EyeOff, Wallet } from 'lucide-vue-next';
 import {
   asMinor,
   convertMinor,
@@ -152,6 +167,32 @@ function accountMinor(acc) {
   return asMinor(acc.amount_minor);
 }
 
+function categoryTotal(items) {
+  if (!items || items.length === 0) return '₴0';
+
+  let sum = 0n;
+
+  for (const acc of items) {
+    const minor = accountMinor(acc);
+    const currency = String(acc.currency || '').toUpperCase();
+
+    if (minor == null || minorDigits(currency) == null) continue;
+
+    if (currency === 'UAH') {
+      sum += minor;
+      continue;
+    }
+
+    const quote = rates.value?.[currency];
+    if (!quote) continue;
+
+    const converted = convertMinor(minor, currency, 'UAH', quote.perUnit);
+    if (converted != null) sum += converted;
+  }
+
+  return formatMinor(sum, 'UAH');
+}
+
 const totalState = computed(() => {
   if (
     accounts.value.length > 0 &&
@@ -217,6 +258,23 @@ const totalText = computed(() => {
   return 'Немає курсу';
 });
 
+const totalUsd = computed(() => {
+  const state = totalState.value;
+  if (state.kind !== 'ok' || state.sum == null || !rates.value?.USD?.perUnit)
+    return null;
+
+  const usdRate = Number(rates.value.USD.perUnit);
+  if (!Number.isFinite(usdRate) || usdRate <= 0) return null;
+
+  const usdMinor = convertMinor(
+    state.sum,
+    'UAH',
+    'USD',
+    (1 / usdRate).toString(),
+  );
+  return usdMinor;
+});
+
 const totalNote = computed(() => {
   const state = totalState.value;
   const notes = [];
@@ -228,10 +286,14 @@ const totalNote = computed(() => {
     notes.push(currencies ? `Немає курсу: ${currencies}` : state.message);
   }
   if (state.kind === 'ok' && state.usedForeign) {
-    const parts = ['Оцінка'];
-    if (state.nbuDate) parts.push(`курс НБУ на ${formatRateDate(state.nbuDate)}`);
+    const parts = [];
+    if (totalUsd.value != null) {
+      parts.push(`${formatMinor(totalUsd.value, 'USD')}`);
+    }
+    if (state.nbuDate)
+      parts.push(`курс НБУ на ${formatRateDate(state.nbuDate)}`);
     if (state.btcDate) parts.push(`BTC на ${formatRateDate(state.btcDate)}`);
-    notes.push(parts.join(' · '));
+    if (parts.length) notes.push(parts.join(' · '));
   }
   return notes.filter(Boolean).join('\n');
 });
@@ -239,7 +301,7 @@ const totalNote = computed(() => {
 // === Групування рахунків за категоріями ===
 const groupedAccounts = computed(() => {
   const groups = Object.fromEntries(
-    categories.value.map((category) => [category, []])
+    categories.value.map((category) => [category, []]),
   );
   for (const acc of accounts.value) {
     if (!groups[acc.category]) groups[acc.category] = [];
@@ -263,7 +325,7 @@ function toggleTotal() {
 function toggleCategory(category) {
   if (collapsedCategories.value.includes(category)) {
     collapsedCategories.value = collapsedCategories.value.filter(
-      (c) => c !== category
+      (c) => c !== category,
     );
   } else {
     collapsedCategories.value.push(category);
