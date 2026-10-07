@@ -8,7 +8,7 @@
       @click="$emit('navigate', item.name)"
       class="flex flex-col items-center text-sm"
       :class="
-        current === item.name ? 'text-white-600 font-semibold' : 'text-gray-500'
+        current === item.name ? 'text-white font-semibold' : 'text-gray-500'
       "
     >
       <component :is="item.component" class="" />
