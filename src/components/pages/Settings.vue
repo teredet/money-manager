@@ -34,14 +34,55 @@
     </div>
 
     <div
+      v-else-if="activeView === 'default-account'"
+      class="rounded-lg border border-zinc-800 bg-zinc-900 p-4"
+    >
+      <div class="mb-4 grid grid-cols-[24px_1fr_24px] items-center gap-3">
+        <button type="button" class="text-sm text-gray-400" @click="backToMain">
+          ←
+        </button>
+        <h3 class="text-center text-lg font-semibold text-white">
+          Default account
+        </h3>
+        <span aria-hidden="true"></span>
+      </div>
+
+      <div class="space-y-4">
+        <div v-for="type in defaultAccountTypes" :key="type.id">
+          <label class="mb-1 block text-sm text-gray-300">
+            {{ type.label }}
+          </label>
+          <select
+            :value="defaultAccountIds[type.id]"
+            @change="updateDefaultAccount(type.id, $event.target.value)"
+            class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
+          >
+            <option value="">No default</option>
+            <option
+              v-for="account in accounts"
+              :key="account.id"
+              :value="account.id"
+            >
+              {{ account.name }}
+            </option>
+          </select>
+        </div>
+      </div>
+      <p v-if="settingsError" class="mt-3 text-sm text-red-600">
+        {{ settingsError }}
+      </p>
+    </div>
+
+    <div
       v-else-if="activeView === 'categories'"
       class="rounded-lg border border-zinc-800 bg-zinc-900 p-4"
     >
-      <div class="mb-4 flex items-center gap-3">
+      <div class="mb-4 grid grid-cols-[24px_1fr_24px] items-center gap-3">
         <button type="button" class="text-sm text-gray-400" @click="backToMain">
-          ← Back
+          ←
         </button>
-        <h3 class="text-lg font-semibold text-white">Categories</h3>
+        <h3 class="text-center text-lg font-semibold text-white">Categories</h3>
+        <span aria-hidden="true"></span>
       </div>
 
       <div class="mb-4 grid w-full grid-cols-2 gap-2">
@@ -73,11 +114,14 @@
       v-else-if="activeView === 'regular-payments'"
       class="rounded-lg border border-zinc-800 bg-zinc-900 p-4"
     >
-      <div class="mb-4 flex items-center gap-3">
+      <div class="mb-4 grid grid-cols-[24px_1fr_24px] items-center gap-3">
         <button type="button" class="text-sm text-gray-400" @click="backToMain">
-          ← Back
+          ←
         </button>
-        <h3 class="text-lg font-semibold text-white">Regular payments</h3>
+        <h3 class="text-center text-lg font-semibold text-white">
+          Regular payments
+        </h3>
+        <span aria-hidden="true"></span>
       </div>
       <p class="text-sm text-gray-400">Recurring payment rules will go here.</p>
     </div>
@@ -86,11 +130,12 @@
       v-else-if="activeView === 'budget'"
       class="rounded-lg border border-zinc-800 bg-zinc-900 p-4"
     >
-      <div class="mb-4 flex items-center gap-3">
+      <div class="mb-4 grid grid-cols-[24px_1fr_24px] items-center gap-3">
         <button type="button" class="text-sm text-gray-400" @click="backToMain">
-          ← Back
+          ←
         </button>
-        <h3 class="text-lg font-semibold text-white">Budget</h3>
+        <h3 class="text-center text-lg font-semibold text-white">Budget</h3>
+        <span aria-hidden="true"></span>
       </div>
       <p class="text-sm text-gray-400">Budget settings will go here.</p>
     </div>
@@ -100,11 +145,21 @@
 <script setup>
 import { ref, onMounted } from 'vue';
 import { supabase } from '../../supabase';
+import {
+  fetchDefaultAccounts,
+  saveDefaultAccounts,
+} from '../../defaultAccount.js';
 
 const tabs = [
+  { id: 'default-account', label: 'Default account' },
   { id: 'categories', label: 'Categories' },
   { id: 'regular-payments', label: 'Regular payments' },
   { id: 'budget', label: 'Budget' },
+];
+
+const defaultAccountTypes = [
+  { id: 'income', label: 'Income' },
+  { id: 'expense', label: 'Expenses' },
 ];
 
 const categoryTabs = [
@@ -117,6 +172,60 @@ const selectedCategoryTab = ref('income');
 const email = ref('');
 const busy = ref(false);
 const errorMessage = ref('');
+const accounts = ref([]);
+const defaultAccountIds = ref({ income: '', expense: '' });
+const settingsError = ref('');
+
+function applyDefaultAccounts(defaults) {
+  defaultAccountIds.value = {
+    income: defaults.income ?? '',
+    expense: defaults.expense ?? '',
+  };
+}
+
+async function loadAccounts() {
+  const { data, error } = await supabase
+    .from('accounts')
+    .select('*')
+    .order('created_at', { ascending: true });
+  if (error) {
+    settingsError.value = error.message;
+    return;
+  }
+  accounts.value = data ?? [];
+}
+
+async function loadDefaultAccounts() {
+  try {
+    applyDefaultAccounts(await fetchDefaultAccounts(supabase));
+  } catch (error) {
+    settingsError.value = error.message;
+  }
+}
+
+async function updateDefaultAccount(type, value) {
+  const previous = { ...defaultAccountIds.value };
+  const normalized = value === '' ? '' : String(value);
+  defaultAccountIds.value = {
+    ...defaultAccountIds.value,
+    [type]: normalized,
+  };
+
+  try {
+    const saved = await saveDefaultAccounts(
+      {
+        income: defaultAccountIds.value.income || null,
+        expense: defaultAccountIds.value.expense || null,
+      },
+      supabase,
+    );
+    applyDefaultAccounts(saved);
+    settingsError.value = '';
+  } catch (error) {
+    defaultAccountIds.value = previous;
+    settingsError.value = error.message;
+  }
+}
 
 function openPage(page) {
   activeView.value = page;
@@ -129,6 +238,7 @@ function backToMain() {
 onMounted(async () => {
   const { data } = await supabase.auth.getSession();
   email.value = data.session?.user?.email ?? '';
+  await Promise.all([loadAccounts(), loadDefaultAccounts()]);
 });
 
 async function signOut() {

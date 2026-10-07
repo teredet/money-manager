@@ -177,10 +177,14 @@
 </template>
 
 <script setup>
-import { computed, ref, watchEffect } from 'vue';
+import { computed, onMounted, ref, watch, watchEffect } from 'vue';
 import { Wallet } from 'lucide-vue-next';
 import { supabase } from '../../supabase';
 import { formatMinor, parseMajorToMinor } from '../../money.js';
+import {
+  fetchDefaultAccounts,
+  getDefaultAccountId,
+} from '../../defaultAccount.js';
 
 const props = defineProps({
   accounts: {
@@ -204,6 +208,8 @@ const entryNote = ref('');
 const selectedAccountId = ref('');
 const accountListOpen = ref(false);
 const entryError = ref('');
+const defaultAccounts = ref({ income: null, expense: null });
+const defaultsReady = ref(false);
 
 const entryTypeLabel = computed(
   () =>
@@ -235,18 +241,48 @@ function formatAccount(account) {
   return formatMinor(BigInt(amountMinor), currency);
 }
 
+function applyDefaultAccount(type) {
+  const defaultAccountId = getDefaultAccountId(
+    type,
+    props.accounts,
+    defaultAccounts.value,
+  );
+  selectedAccountId.value =
+    defaultAccountId == null ? '' : String(defaultAccountId);
+}
+
+onMounted(async () => {
+  try {
+    defaultAccounts.value = await fetchDefaultAccounts(supabase);
+  } catch (error) {
+    console.error(error);
+  } finally {
+    defaultsReady.value = true;
+  }
+});
+
+watch(
+  () => entryType.value,
+  (nextType) => {
+    if (!defaultsReady.value) return;
+    applyDefaultAccount(nextType);
+  },
+);
+
 watchEffect(() => {
   if (!props.accounts.length) {
     selectedAccountId.value = '';
     return;
   }
 
+  if (!defaultsReady.value) return;
+
   const hasSelected = props.accounts.some(
     (account) => String(account.id) === selectedAccountId.value,
   );
 
   if (!selectedAccountId.value || !hasSelected) {
-    selectedAccountId.value = String(props.accounts[0].id);
+    applyDefaultAccount(entryType.value);
   }
 
   if (currentCategories.value.length && !entryCategory.value) {

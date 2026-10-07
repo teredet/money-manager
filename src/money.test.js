@@ -2,6 +2,10 @@ import assert from 'node:assert/strict';
 import test from 'node:test';
 import { convertMinor, formatMinor, minorDigits, parseMajorToMinor } from './money.js';
 import { formatRateDate, parseBtcUahRate, parseNbuRates } from './rates.js';
+import {
+  defaultAccountsFromRow,
+  getDefaultAccountId,
+} from './defaultAccount.js';
 
 test('stores hryvnia and cents as integer minor units', () => {
   assert.equal(parseMajorToMinor('10.50', 'UAH'), 1050n);
@@ -54,4 +58,27 @@ test('reads NBU and BTC quotes as decimal strings with dates', () => {
   assert.equal(btc.perUnit, '3871255');
   assert.equal(formatRateDate('06.10.2026'), '06.10.2026');
   assert.equal(formatRateDate(btc.date), '06.10.2026');
+});
+
+test('keeps separate default accounts for income and expenses', () => {
+  const accounts = [
+    { id: 1, name: 'Cash' },
+    { id: 2, name: 'Card' },
+    { id: 5, name: 'Savings' },
+  ];
+  const defaults = defaultAccountsFromRow({
+    expense_account_id: 2,
+    income_account_id: 5,
+  });
+
+  assert.deepEqual(defaults, { expense: '2', income: '5' });
+  assert.deepEqual(defaultAccountsFromRow(null), {
+    expense: null,
+    income: null,
+  });
+  assert.equal(getDefaultAccountId('expense', accounts, defaults), 2);
+  assert.equal(getDefaultAccountId('income', accounts, defaults), 5);
+  assert.equal(getDefaultAccountId('expense', accounts, { expense: '99' }), 1);
+  assert.equal(getDefaultAccountId('expense', accounts), 1);
+  assert.equal(getDefaultAccountId('expense', [], defaults), null);
 });
