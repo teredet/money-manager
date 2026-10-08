@@ -32,6 +32,60 @@ export function parseMajorToMinor(input, currency) {
   return negative ? -minor : minor;
 }
 
+function localeMinusSign() {
+  return (
+    new Intl.NumberFormat('uk-UA')
+      .formatToParts(-1)
+      .find((part) => part.type === 'minusSign')?.value ?? '-'
+  );
+}
+
+function localeDecimalSeparator() {
+  return (
+    new Intl.NumberFormat('uk-UA')
+      .formatToParts(1.1)
+      .find((part) => part.type === 'decimal')?.value ?? ','
+  );
+}
+
+function formatGroupedInteger(whole) {
+  return new Intl.NumberFormat('uk-UA', {
+    useGrouping: true,
+    maximumFractionDigits: 0,
+  }).format(whole);
+}
+
+function formatExactDecimal(whole, fraction, digits, negative) {
+  const integer = formatGroupedInteger(whole);
+  const numeric =
+    digits > 0 ? `${integer}${localeDecimalSeparator()}${fraction}` : integer;
+  return negative ? `${localeMinusSign()}${numeric}` : numeric;
+}
+
+function formatExactCurrency(whole, fraction, digits, negative, currency) {
+  const sample = new Intl.NumberFormat('uk-UA', {
+    style: 'currency',
+    currency,
+    minimumFractionDigits: digits,
+    maximumFractionDigits: digits,
+  }).formatToParts(negative ? -1 : 1);
+
+  const integer = formatGroupedInteger(whole);
+  let replacedInteger = false;
+
+  return sample
+    .map((part) => {
+      if (part.type === 'integer' || part.type === 'group') {
+        if (part.type === 'group' || replacedInteger) return '';
+        replacedInteger = true;
+        return integer;
+      }
+      if (part.type === 'fraction') return fraction;
+      return part.value;
+    })
+    .join('');
+}
+
 export function formatMinor(minor, currency) {
   const digits = minorDigits(currency);
   if (digits == null || typeof minor !== 'bigint') return '';
@@ -40,23 +94,39 @@ export function formatMinor(minor, currency) {
   const absolute = negative ? -minor : minor;
   const scale = 10n ** BigInt(digits);
   const whole = absolute / scale;
-  const fraction = (absolute % scale).toString().padStart(digits, '0');
-  const major = Number(`${negative ? '-' : ''}${whole}.${fraction}`);
+  const fraction =
+    digits === 0 ? '' : (absolute % scale).toString().padStart(digits, '0');
 
   if (currency === BTC) {
-    const number = new Intl.NumberFormat('uk-UA', {
-      minimumFractionDigits: digits,
-      maximumFractionDigits: digits,
-    }).format(major);
-    return `${number} ₿`;
+    return `${formatExactDecimal(whole, fraction, digits, negative)} ₿`;
   }
 
-  return new Intl.NumberFormat('uk-UA', {
-    style: 'currency',
-    currency,
-    minimumFractionDigits: digits,
-    maximumFractionDigits: digits,
-  }).format(major);
+  return formatExactCurrency(whole, fraction, digits, negative, currency);
+}
+
+export function formatMinorInput(value, currency) {
+  const minor = asMinor(value);
+  const digits = minorDigits(currency);
+  if (minor == null || digits == null) return '';
+
+  const negative = minor < 0n;
+  const absolute = negative ? -minor : minor;
+  const scale = 10n ** BigInt(digits);
+  const whole = absolute / scale;
+  const fraction =
+    digits === 0
+      ? ''
+      : (absolute % scale).toString().padStart(digits, '0').replace(/0+$/, '');
+  const sign = negative ? '-' : '';
+
+  return fraction
+    ? `${sign}${whole.toString()}.${fraction}`
+    : `${sign}${whole.toString()}`;
+}
+
+export function minorToWire(minor) {
+  if (typeof minor !== 'bigint') return null;
+  return minor.toString();
 }
 
 function divRoundHalfAwayFromZero(numerator, denominator) {
@@ -73,6 +143,16 @@ function divRoundHalfAwayFromZero(numerator, denominator) {
   return negative ? -rounded : rounded;
 }
 
+function parseRate(ratePerUnit) {
+  const rate = String(ratePerUnit).trim();
+  if (!/^\d+(\.\d+)?$/.test(rate)) return null;
+
+  const [whole, fraction = ''] = rate.split('.');
+  const rateScale = 10n ** BigInt(fraction.length);
+  const rateNumerator = BigInt(whole) * rateScale + BigInt(fraction || '0');
+  return { rateScale, rateNumerator };
+}
+
 export function convertMinor(amountMinor, fromCurrency, toCurrency, ratePerUnit) {
   if (typeof amountMinor !== 'bigint') return null;
   if (fromCurrency === toCurrency) return amountMinor;
@@ -81,16 +161,41 @@ export function convertMinor(amountMinor, fromCurrency, toCurrency, ratePerUnit)
   const toDigits = minorDigits(toCurrency);
   if (fromDigits == null || toDigits == null) return null;
 
-  const rate = String(ratePerUnit).trim();
-  if (!/^\d+(\.\d+)?$/.test(rate)) return null;
+  const rate = parseRate(ratePerUnit);
+  if (!rate) return null;
 
-  const [whole, fraction = ''] = rate.split('.');
-  const rateScale = 10n ** BigInt(fraction.length);
-  const rateNumerator = BigInt(whole) * rateScale + BigInt(fraction || '0');
-  const numerator = amountMinor * rateNumerator * 10n ** BigInt(toDigits);
-  const denominator = rateScale * 10n ** BigInt(fromDigits);
+  const numerator =
+    amountMinor * rate.rateNumerator * 10n ** BigInt(toDigits);
+  const denominator = rate.rateScale * 10n ** BigInt(fromDigits);
 
   return divRoundHalfAwayFromZero(numerator, denominator);
+}
+
+export function convertMinorDivide(amountMinor, fromCurrency, toCurrency, ratePerUnit) {
+  if (typeof amountMinor !== 'bigint') return null;
+  if (fromCurrency === toCurrency) return amountMinor;
+
+  const fromDigits = minorDigits(fromCurrency);
+  const toDigits = minorDigits(toCurrency);
+  if (fromDigits == null || toDigits == null) return null;
+
+  const rate = parseRate(ratePerUnit);
+  if (!rate || rate.rateNumerator === 0n) return null;
+
+  const numerator = amountMinor * rate.rateScale * 10n ** BigInt(toDigits);
+  const denominator = rate.rateNumerator * 10n ** BigInt(fromDigits);
+
+  return divRoundHalfAwayFromZero(numerator, denominator);
+}
+
+export function sharePercent(part, total) {
+  if (typeof part !== 'bigint' || typeof total !== 'bigint' || total === 0n) {
+    return '0%';
+  }
+
+  const rounded = divRoundHalfAwayFromZero(part * 100n, total);
+  if (rounded == null) return '0%';
+  return `${rounded}%`;
 }
 
 export function asMinor(value) {

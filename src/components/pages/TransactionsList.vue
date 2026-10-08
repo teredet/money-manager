@@ -79,7 +79,7 @@
 
 <script setup>
 import { computed } from 'vue';
-import { convertMinor, formatMinor } from '../../money.js';
+import { asMinor, convertMinor, formatMinor } from '../../money.js';
 
 const props = defineProps({
   transactions: {
@@ -115,7 +115,7 @@ const title = props.category
 const accountLookup = computed(
   () =>
     new Map(
-      props.accounts.map((account) => [Number(account.id), account.name]),
+      props.accounts.map((account) => [String(account.id), account.name]),
     ),
 );
 
@@ -158,13 +158,11 @@ function formatDate(value) {
 
 function getAccountName(accountId) {
   if (accountId === null || accountId === undefined) return 'Account';
-  return accountLookup.value.get(Number(accountId)) || 'Account';
+  return accountLookup.value.get(String(accountId)) || 'Account';
 }
 
-function toBigInt(value) {
-  if (typeof value === 'bigint') return value;
-  if (value === null || value === undefined) return 0n;
-  return BigInt(value);
+function minorOf(value) {
+  return asMinor(value) ?? 0n;
 }
 
 function getUahEquivalentText(transaction) {
@@ -173,7 +171,7 @@ function getUahEquivalentText(transaction) {
 
   const rate = props.rates?.[currency]?.perUnit ?? '1';
   const converted = convertMinor(
-    toBigInt(transaction.amount_minor),
+    minorOf(transaction.amount_minor),
     currency,
     'UAH',
     rate,
@@ -184,6 +182,6 @@ function getUahEquivalentText(transaction) {
 }
 
 function formatMinorValue(amountMinor, currency) {
-  return formatMinor(toBigInt(amountMinor), currency || 'UAH');
+  return formatMinor(minorOf(amountMinor), currency || 'UAH');
 }
 </script>

@@ -145,10 +145,11 @@
 </template>
 
 <script setup>
-import { computed, onActivated, onMounted, ref, watchEffect } from 'vue';
-import { supabase } from '../../supabase';
-import { convertMinor, formatMinor } from '../../money.js';
+import { computed, onActivated, onMounted, ref } from 'vue';
+import { asMinor, convertMinor, formatMinor, sharePercent } from '../../money.js';
 import { fetchUahRates } from '../../rates.js';
+import { listAccounts } from '../../data/accounts.js';
+import { listTransactions } from '../../data/transactions.js';
 import AddTransaction from './AddTransaction.vue';
 import TransactionsList from './TransactionsList.vue';
 
@@ -168,13 +169,10 @@ const selectedTab = ref('expense');
 const selectedPeriod = ref('month');
 const adding = ref(false);
 const accounts = ref([]);
-const selectedAccountId = ref('');
 const transactions = ref([]);
 const rates = ref({});
 const loadingTransactions = ref(false);
 const transactionsError = ref('');
-
-const entryTypeLabel = computed(() => 'Expense');
 
 function startOfPeriod(periodId) {
   const now = new Date();
@@ -217,9 +215,17 @@ const filteredTransactions = computed(() => {
 });
 
 function convertToUahMinor(amountMinor, currency) {
-  const rate = rates.value[currency]?.perUnit ?? '1';
-  const converted = convertMinor(BigInt(amountMinor), currency, 'UAH', rate);
-  return converted ?? 0n;
+  const minor = asMinor(amountMinor);
+  if (minor == null) return 0n;
+  const code = currency || 'UAH';
+  if (code === 'UAH') return minor;
+  const rate = rates.value[code]?.perUnit ?? '1';
+  return convertMinor(minor, code, 'UAH', rate) ?? 0n;
+}
+
+function compareMinorDesc(left, right) {
+  if (left === right) return 0;
+  return left > right ? -1 : 1;
 }
 
 const expenseCategories = computed(() => {
@@ -246,13 +252,10 @@ const expenseCategories = computed(() => {
       name: item.name,
       count: item.count,
       total: item.total,
-      share:
-        total === 0n
-          ? '0%'
-          : `${Math.round((Number(item.total) / Number(total)) * 100)}%`,
+      share: sharePercent(item.total, total),
       amount: formatMinor(item.total, 'UAH'),
     }))
-    .sort((a, b) => Number(b.total - a.total));
+    .sort((a, b) => compareMinorDesc(a.total, b.total));
 });
 
 const incomeCategories = computed(() => {
@@ -279,13 +282,10 @@ const incomeCategories = computed(() => {
       name: item.name,
       count: item.count,
       total: item.total,
-      share:
-        total === 0n
-          ? '0%'
-          : `${Math.round((Number(item.total) / Number(total)) * 100)}%`,
+      share: sharePercent(item.total, total),
       amount: formatMinor(item.total, 'UAH'),
     }))
-    .sort((a, b) => Number(b.total - a.total));
+    .sort((a, b) => compareMinorDesc(a.total, b.total));
 });
 
 const currentOverviewAmount = computed(() => {
@@ -331,37 +331,11 @@ function clearTransactionsView() {
 }
 
 async function loadAccounts() {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    accounts.value = [];
-    selectedAccountId.value = '';
-    return;
-  }
-
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('*')
-    .order('created_at', { ascending: true });
-
-  if (error) {
+  try {
+    accounts.value = await listAccounts();
+  } catch (error) {
     console.error(error);
     accounts.value = [];
-    return;
-  }
-
-  accounts.value = data ?? [];
-  if (!accounts.value.length) {
-    selectedAccountId.value = '';
-    return;
-  }
-
-  if (
-    !selectedAccountId.value ||
-    !accounts.value.some(
-      (account) => account.id === Number(selectedAccountId.value),
-    )
-  ) {
-    selectedAccountId.value = String(accounts.value[0].id);
   }
 }
 
@@ -375,30 +349,18 @@ async function loadRates() {
 }
 
 async function loadTransactions() {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    transactions.value = [];
-    return;
-  }
-
   loadingTransactions.value = true;
   transactionsError.value = '';
 
-  const { data, error } = await supabase
-    .from('transactions')
-    .select('*')
-    .order('occurred_on', { ascending: false });
-
-  loadingTransactions.value = false;
-
-  if (error) {
+  try {
+    transactions.value = await listTransactions();
+  } catch (error) {
     console.error(error);
     transactionsError.value = 'Не вдалося завантажити транзакції';
     transactions.value = [];
-    return;
+  } finally {
+    loadingTransactions.value = false;
   }
-
-  transactions.value = data ?? [];
 }
 
 async function onTransactionSaved() {

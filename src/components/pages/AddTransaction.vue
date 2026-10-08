@@ -41,9 +41,9 @@
         <input
           id="entry-amount"
           v-model="entryAmount"
-          type="number"
-          min="0"
-          step="0.01"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
           class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
           placeholder="0.00"
           required
@@ -179,12 +179,11 @@
 <script setup>
 import { computed, onMounted, ref, watch, watchEffect } from 'vue';
 import { Wallet } from 'lucide-vue-next';
-import { supabase } from '../../supabase';
-import { formatMinor, parseMajorToMinor } from '../../money.js';
-import {
-  fetchDefaultAccounts,
-  getDefaultAccountId,
-} from '../../defaultAccount.js';
+import { asMinor, formatMinor, minorDigits } from '../../money.js';
+import { getDefaultAccountId } from '../../defaultAccount.js';
+import { createTransaction } from '../../data/transactions.js';
+import { loadDefaultAccounts } from '../../data/settings.js';
+import { categoriesForKind, todayIsoDate } from '../../data/validate.js';
 
 const props = defineProps({
   accounts: {
@@ -203,7 +202,7 @@ const entryTypes = [
 const entryType = ref('expense');
 const entryCategory = ref('');
 const entryAmount = ref('');
-const entryDate = ref(new Date().toISOString().slice(0, 10));
+const entryDate = ref(todayIsoDate());
 const entryNote = ref('');
 const selectedAccountId = ref('');
 const accountListOpen = ref(false);
@@ -216,15 +215,11 @@ const entryTypeLabel = computed(
     entryTypes.find((type) => type.id === entryType.value)?.label ?? 'Expense',
 );
 
-const currentCategories = computed(() => {
-  if (entryType.value === 'income')
-    return ['Salary', 'Freelance', 'Investments', 'Other'];
-  return ['Food', 'Transport', 'Bills', 'Shopping', 'Other'];
-});
+const currentCategories = computed(() => categoriesForKind(entryType.value));
 
 const selectedAccount = computed(() =>
   props.accounts.find(
-    (account) => account.id === Number(selectedAccountId.value),
+    (account) => String(account.id) === selectedAccountId.value,
   ),
 );
 
@@ -235,10 +230,10 @@ function selectAccount(account) {
 
 function formatAccount(account) {
   const currency = String(account?.currency || '').toUpperCase();
-  const amountMinor = account?.amount_minor;
+  const amountMinor = asMinor(account?.amount_minor);
 
-  if (amountMinor == null || !currency) return '—';
-  return formatMinor(BigInt(amountMinor), currency);
+  if (amountMinor == null || minorDigits(currency) == null) return '—';
+  return formatMinor(amountMinor, currency);
 }
 
 function applyDefaultAccount(type) {
@@ -253,7 +248,7 @@ function applyDefaultAccount(type) {
 
 onMounted(async () => {
   try {
-    defaultAccounts.value = await fetchDefaultAccounts(supabase);
+    defaultAccounts.value = await loadDefaultAccounts();
   } catch (error) {
     console.error(error);
   } finally {
@@ -266,6 +261,10 @@ watch(
   (nextType) => {
     if (!defaultsReady.value) return;
     applyDefaultAccount(nextType);
+    const categories = categoriesForKind(nextType);
+    if (!categories.includes(entryCategory.value)) {
+      entryCategory.value = categories[0] ?? '';
+    }
   },
 );
 
@@ -293,49 +292,25 @@ watchEffect(() => {
 async function saveEntry() {
   entryError.value = '';
 
-  if (!selectedAccountId.value) {
-    entryError.value = 'Додайте рахунок, щоб створити транзакцію';
-    return;
-  }
-
-  const account = selectedAccount.value;
-  if (!account) {
-    entryError.value = 'Обраний рахунок не знайдено';
-    return;
-  }
-
-  const amountMinor = parseMajorToMinor(entryAmount.value, account.currency);
-  if (amountMinor == null || amountMinor <= 0n) {
-    entryError.value = 'Некоректна сума';
-    return;
-  }
-
-  const normalizedAmountMinor = amountMinor > 0n ? amountMinor : -amountMinor;
-  const payload = {
-    account_id: Number(account.id),
-    kind: entryType.value,
-    category: entryCategory.value,
-    amount_minor: Number(normalizedAmountMinor),
-    occurred_on: entryDate.value || new Date().toISOString().slice(0, 10),
-    note: entryNote.value.trim() || null,
-  };
-
   try {
-    const { error } = await supabase.from('transactions').insert([payload]);
-    if (error) {
-      console.error(error);
-      entryError.value = error.message;
-      return;
-    }
+    await createTransaction({
+      accounts: props.accounts,
+      accountId: selectedAccountId.value,
+      kind: entryType.value,
+      category: entryCategory.value,
+      amount: entryAmount.value,
+      occurredOn: entryDate.value,
+      note: entryNote.value,
+    });
   } catch (error) {
-    console.error(error);
-    entryError.value = 'Не вдалося зберегти транзакцію';
+    if (error?.name !== 'DataError') console.error(error);
+    entryError.value = error.message || 'Не вдалося зберегти транзакцію';
     return;
   }
 
   entryCategory.value = currentCategories.value[0] ?? '';
   entryAmount.value = '';
-  entryDate.value = new Date().toISOString().slice(0, 10);
+  entryDate.value = todayIsoDate();
   entryNote.value = '';
   emit('saved');
 }

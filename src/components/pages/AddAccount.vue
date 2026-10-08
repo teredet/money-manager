@@ -77,9 +77,9 @@
         <input
           id="account-amount"
           v-model="amount"
-          type="number"
-          min="0"
-          step="0.01"
+          type="text"
+          inputmode="decimal"
+          autocomplete="off"
           class="w-full rounded-lg border border-zinc-700 bg-zinc-900 px-3 py-2 text-white"
           placeholder="0.00"
           required
@@ -103,8 +103,7 @@
 
 <script setup>
 import { computed, ref } from 'vue';
-import { supabase } from '../../supabase';
-import { parseMajorToMinor } from '../../money.js';
+import { createAccount } from '../../data/accounts.js';
 
 const props = defineProps({
   categories: {
@@ -143,57 +142,28 @@ const currencyReady = computed(() => {
 
 async function submit() {
   errorMessage.value = '';
-  const trimmedName = name.value.trim();
 
-  if (!trimmedName) {
-    errorMessage.value = 'Вкажіть назву';
-    return;
-  }
-  if (!props.categories.includes(category.value)) {
-    errorMessage.value = 'Невідома категорія';
-    return;
-  }
-  if (!props.currencies.includes(currency.value)) {
-    errorMessage.value = 'Невідома валюта';
-    return;
-  }
   if (!currencyReady.value) {
     errorMessage.value = 'Немає курсу для цієї валюти';
     return;
   }
 
-  const amountMinor = parseMajorToMinor(amount.value, currency.value);
-  if (amountMinor == null) {
-    errorMessage.value = 'Некоректна сума';
-    return;
-  }
-
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    errorMessage.value = 'Увійдіть, щоб зберегти рахунок';
-    return;
-  }
-
   busy.value = true;
-  const { data, error } = await supabase
-    .from('accounts')
-    .insert([
-      {
-        name: trimmedName,
-        category: category.value,
-        currency: currency.value,
-        amount_minor: amountMinor.toString(),
-      },
-    ])
-    .select();
-  busy.value = false;
-
-  if (error) {
-    console.error(error);
+  try {
+    const saved = await createAccount({
+      name: name.value,
+      category: category.value,
+      currency: currency.value,
+      amount: amount.value,
+      categories: props.categories,
+      currencies: props.currencies,
+    });
+    emit('saved', saved);
+  } catch (error) {
+    if (error?.name !== 'DataError') console.error(error);
     errorMessage.value = error.message;
-    return;
+  } finally {
+    busy.value = false;
   }
-
-  emit('saved', data[0]);
 }
 </script>

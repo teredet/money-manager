@@ -102,15 +102,17 @@
 
 <script setup>
 import { ref, computed, onMounted, onActivated } from 'vue';
-import { supabase } from '../../supabase';
 import { Eye, EyeOff, Wallet } from 'lucide-vue-next';
 import {
   asMinor,
   convertMinor,
+  convertMinorDivide,
   formatMinor,
   minorDigits,
 } from '../../money.js';
 import { fetchUahRates, formatRateDate } from '../../rates.js';
+import { listAccounts } from '../../data/accounts.js';
+import { listAccountCatalog } from '../../data/catalog.js';
 import AddAccount from './AddAccount.vue';
 import ChangeAccount from './ChangeAccount.vue';
 
@@ -129,15 +131,11 @@ const ratesStatus = ref('loading');
 const ratesError = ref('');
 
 async function fetchAccounts() {
-  const { data: sessionData } = await supabase.auth.getSession();
-  if (!sessionData.session) {
-    accounts.value = [];
-    return;
+  try {
+    accounts.value = await listAccounts();
+  } catch (error) {
+    console.error(error);
   }
-
-  const { data, error } = await supabase.from('accounts').select('*');
-  if (error) console.error(error);
-  else accounts.value = data;
 }
 
 async function loadRates() {
@@ -154,21 +152,15 @@ async function loadRates() {
 
 async function fetchLists() {
   listsError.value = '';
-  const [categoryResult, currencyResult] = await Promise.all([
-    supabase.from('accounts_category').select('name').order('id'),
-    supabase.from('currency').select('name').order('id'),
-  ]);
-
-  if (categoryResult.error || currencyResult.error) {
-    listsError.value =
-      categoryResult.error?.message || currencyResult.error?.message;
+  try {
+    const catalog = await listAccountCatalog();
+    categories.value = catalog.categories;
+    currencies.value = catalog.currencies;
+  } catch (error) {
+    listsError.value = error.message;
+  } finally {
     listsReady.value = true;
-    return;
   }
-
-  categories.value = categoryResult.data.map((row) => row.name);
-  currencies.value = currencyResult.data.map((row) => row.name);
-  listsReady.value = true;
 }
 
 onMounted(() => {
@@ -275,19 +267,11 @@ const totalText = computed(() => {
 
 const totalUsd = computed(() => {
   const state = totalState.value;
-  if (state.kind !== 'ok' || state.sum == null || !rates.value?.USD?.perUnit)
+  if (state.kind !== 'ok' || state.sum == null || !rates.value?.USD?.perUnit) {
     return null;
+  }
 
-  const usdRate = Number(rates.value.USD.perUnit);
-  if (!Number.isFinite(usdRate) || usdRate <= 0) return null;
-
-  const usdMinor = convertMinor(
-    state.sum,
-    'UAH',
-    'USD',
-    (1 / usdRate).toString(),
-  );
-  return usdMinor;
+  return convertMinorDivide(state.sum, 'UAH', 'USD', rates.value.USD.perUnit);
 });
 
 const totalNote = computed(() => {

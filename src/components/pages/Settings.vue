@@ -144,11 +144,12 @@
 
 <script setup>
 import { ref, onMounted, onActivated } from 'vue';
-import { supabase } from '../../supabase';
+import { listAccounts } from '../../data/accounts.js';
+import { currentEmail, signOut as endSession } from '../../data/session.js';
 import {
-  fetchDefaultAccounts,
-  saveDefaultAccounts,
-} from '../../defaultAccount.js';
+  loadDefaultAccounts,
+  storeDefaultAccounts,
+} from '../../data/settings.js';
 
 const tabs = [
   { id: 'default-account', label: 'Default account' },
@@ -184,20 +185,16 @@ function applyDefaultAccounts(defaults) {
 }
 
 async function loadAccounts() {
-  const { data, error } = await supabase
-    .from('accounts')
-    .select('*')
-    .order('created_at', { ascending: true });
-  if (error) {
+  try {
+    accounts.value = await listAccounts();
+  } catch (error) {
     settingsError.value = error.message;
-    return;
   }
-  accounts.value = data ?? [];
 }
 
-async function loadDefaultAccounts() {
+async function loadDefaults() {
   try {
-    applyDefaultAccounts(await fetchDefaultAccounts(supabase));
+    applyDefaultAccounts(await loadDefaultAccounts());
   } catch (error) {
     settingsError.value = error.message;
   }
@@ -212,13 +209,10 @@ async function updateDefaultAccount(type, value) {
   };
 
   try {
-    const saved = await saveDefaultAccounts(
-      {
-        income: defaultAccountIds.value.income || null,
-        expense: defaultAccountIds.value.expense || null,
-      },
-      supabase,
-    );
+    const saved = await storeDefaultAccounts({
+      income: defaultAccountIds.value.income || null,
+      expense: defaultAccountIds.value.expense || null,
+    });
     applyDefaultAccounts(saved);
     settingsError.value = '';
   } catch (error) {
@@ -236,9 +230,12 @@ function backToMain() {
 }
 
 onMounted(async () => {
-  const { data } = await supabase.auth.getSession();
-  email.value = data.session?.user?.email ?? '';
-  await loadDefaultAccounts();
+  try {
+    email.value = await currentEmail();
+  } catch (error) {
+    errorMessage.value = error.message;
+  }
+  await loadDefaults();
 });
 
 onActivated(loadAccounts);
@@ -246,8 +243,12 @@ onActivated(loadAccounts);
 async function signOut() {
   errorMessage.value = '';
   busy.value = true;
-  const { error } = await supabase.auth.signOut();
-  busy.value = false;
-  if (error) errorMessage.value = error.message;
+  try {
+    await endSession();
+  } catch (error) {
+    errorMessage.value = error.message;
+  } finally {
+    busy.value = false;
+  }
 }
 </script>
